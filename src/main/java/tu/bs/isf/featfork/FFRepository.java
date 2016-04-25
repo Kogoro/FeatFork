@@ -14,16 +14,19 @@ public class FFRepository implements Comparable<FFRepository> {
     private int id;
     private String name = "";
     private String owner = "";
-    private List<FFCommit> commits;
     private String pullRequestChain = "";
     private boolean isFork = false;
     private int forks = 0;
     private int watchers = 0;
 
-    public FFRepository(boolean isFork, String repositoryName, int forks) {
+    public FFRepository(int id, String name, String owner, String pullRequestChain, boolean isFork, int forks, int watchers) {
+        this.id = id;
+        this.name = name;
+        this.owner = owner;
+        this.pullRequestChain = pullRequestChain;
         this.isFork = isFork;
-        this.name = repositoryName;
         this.forks = forks;
+        this.watchers = watchers;
     }
 
     public FFRepository(Repository repository) {
@@ -32,7 +35,7 @@ public class FFRepository implements Comparable<FFRepository> {
         this.forks = repository.getForks();
         this.id = (int) repository.getId();
         this.name = repository.getName();
-        this.owner = repository.getOwner().getEmail();
+        this.owner = repository.getOwner().getLogin();
         this.pullRequestChain = "MAIN -> THIS";
     }
 
@@ -58,14 +61,6 @@ public class FFRepository implements Comparable<FFRepository> {
 
     public void setOwner(String owner) {
         this.owner = owner;
-    }
-
-    public List<FFCommit> getCommits() {
-        return commits;
-    }
-
-    public void setCommits(List<FFCommit> commits) {
-        this.commits = commits;
     }
 
     public String getPullRequestChain() {

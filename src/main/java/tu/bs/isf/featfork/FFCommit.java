@@ -15,7 +15,15 @@ public class FFCommit {
     private String branch = "";
     private Date date;
     private String author = "";
-    private List<FFChange> changes = new ArrayList<>();
+
+    public FFCommit(String id, String name, String commitHash, String branch, Date date, String author) {
+        this.id = id;
+        this.name = name;
+        this.commitHash = commitHash;
+        this.branch = branch;
+        this.date = date;
+        this.author = author;
+    }
 
     public String getId() {
         return id;
@@ -65,11 +73,4 @@ public class FFCommit {
         this.author = author;
     }
 
-    public List<FFChange> getChanges() {
-        return changes;
-    }
-
-    public void setChanges(List<FFChange> changes) {
-        this.changes = changes;
-    }
 }

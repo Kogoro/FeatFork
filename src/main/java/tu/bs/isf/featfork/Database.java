@@ -4,6 +4,7 @@ import org.eclipse.egit.github.core.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.sql2o.Connection;
 import org.sql2o.Sql2o;
+import org.sql2o.Sql2oException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,17 +31,22 @@ public class Database {
     private String sqlCreateChanges = "CREATE TABLE IF NOT EXISTS Change (id VARCHAR(255) NOT NULL, file VARCHAR (255), expression VARCHAR (512));";
     private String sqlCreateRepoCommits = "CREATE TABLE IF NOT EXISTS RepoCommit (idRepository INT NOT NULL, idCommit VARCHAR(255) NOT NULL);";
     private String sqlCreateCommitChanges = "CREATE TABLE IF NOT EXISTS CommitChange (idCommit VARCHAR(255) NOT NULL, idChange VARCHAR(255) NOT NULL);";
+    private String sqlCreateCommitRatioOverall = "CREATE TABLE IF NOT EXISTS CommitRatioOverall (idCommit VARCHAR(255) NOT NULL, ratio DOUBLE NOT NULL);";
+    private String sqlCreateCommitRatioSpecific = "CREATE TABLE IF NOT EXISTS CommitRatioSpecific (idCommit VARCHAR(255) NOT NULL, feature VARCHAR(255), ratio DOUBLE NOT NULL);";
 
     /**
      * SQL SELECT STATEMENTS
      **/
     private String sqlGetRepos = "SELECT id, name, owner, pullRequestChain, isFork, forks, watchers FROM Repository";
     private String sqlGetRepo = "SELECT id, name, pullRequestChain, isFork, forks, watchers FROM Repository Where id = :valId";
+    private String sqlGetMainRepo = "SELECT id, name, pullRequestChain, isFork, forks, watchers FROM Repository Where isFork = FALSE";
     private String sqlGetCommit = "SELECT id, commitHash, branch, date, author FROM Commit Where commitHash = :valId";
     private String sqlGetChange = "SELECT id, file, expression FROM Change Where ID = :valId";
     private String sqlGetReposForCommit = "SELECT idRepository FROM RepoCommit Where idCommit = :valId";
     private String sqlGetChangesForCommit = "SELECT idChange FROM CommitChange Where idCommit = :valId";
     private String sqlGetCommitsLeaving = "SELECT idCommit FROM RepoCommit t1 WHERE idRepository = :valRepoId AND NOT EXISTS(SELECT idCommit FROM RepoCommit t2 where idCommit = t1.idCommit AND idRepository = :valRepoMainId);";
+    private String sqlGetRatioOverallForCommit = "SELECT ratio FROM CommitRatioOverall Where idCommit = :valId";
+    private String sqlGetRatioSpecificForCommit = "SELECT feature,ratio FROM CommitRatioSpecific Where idCommit = :valId";
 
     /**
      * SQL INSERT STATEMENTS
@@ -50,6 +56,8 @@ public class Database {
     private String sqlInsertCommit = "INSERT INTO Commit(id, commitHash, branch, date, author) values (:valId, :valCommitHash, :valBranch, :valDate, :valAuthor)";
     private String sqlInsertCommitChange = "INSERT INTO CommitChange(idCommit, idChange) values (:valIdCommit, :valIdChange)";
     private String sqlInsertChange = "INSERT INTO Change(id, file, expression) values (:valId, :valFile, :valExpression)";
+    private String sqlInsertCommitRatioOverall = "INSERT INTO CommitRatioOverall(idCommit, ratio) values (:valIdCommit, :valRatio)";
+    private String sqlInsertCommitRatioSpecific = "INSERT INTO CommitRatioSpecific(idCommit,feature, ratio) values (:valIdCommit, :valFeature, :valRatio)";
 
     /**
      * Constructor
@@ -69,6 +77,11 @@ public class Database {
             con.createQuery(sqlCreateChanges).executeUpdate();
             con.createQuery(sqlCreateRepoCommits).executeUpdate();
             con.createQuery(sqlCreateCommitChanges).executeUpdate();
+            con.createQuery(sqlCreateCommitRatioOverall).executeUpdate();
+            con.createQuery(sqlCreateCommitRatioSpecific).executeUpdate();
+        } catch (Sql2oException ex) {
+            System.out.println("Error: " + ex.getMessage());
+            System.exit(-1);
         }
     }
 
@@ -97,12 +110,50 @@ public class Database {
      *
      * @param repository The repository
      */
+    public void insertRepository(FFRepository repository) {
+        try (Connection con = sql2o.open()) {
+            con.createQuery(sqlInsertRepo)
+                    .addParameter("valId", repository.getId())
+                    .addParameter("valName", repository.getName())
+                    .addParameter("valOwner", repository.getName())
+                    .addParameter("valChain", "0")
+                    .addParameter("valIsFork", repository.isFork())
+                    .addParameter("valForks", repository.getForks())
+                    .addParameter("valWatchers", repository.getWatchers())
+                    .executeUpdate();
+        }
+    }
+
+    /**
+     * Insert a Repository into the database
+     *
+     * @param repository The repository
+     */
     public void insertRepository(Repository repository) {
         try (Connection con = sql2o.open()) {
             con.createQuery(sqlInsertRepo)
                     .addParameter("valId", repository.getId())
                     .addParameter("valName", repository.getName())
-                    .addParameter("valOwner", repository.getOwner() != null ? repository.getOwner().getName() : "Owner")
+                    .addParameter("valOwner", repository.getName())
+                    .addParameter("valChain", "0")
+                    .addParameter("valIsFork", repository.isFork())
+                    .addParameter("valForks", repository.getForks())
+                    .addParameter("valWatchers", repository.getWatchers())
+                    .executeUpdate();
+        }
+    }
+
+    /**
+     * Insert a Repository into the database
+     *
+     * @param repository The repository
+     */
+    public void insertRepository(Repository repository, int id) {
+        try (Connection con = sql2o.open()) {
+            con.createQuery(sqlInsertRepo)
+                    .addParameter("valId", id)
+                    .addParameter("valName", repository.getName())
+                    .addParameter("valOwner", repository.getOwner().getLogin())
                     .addParameter("valChain", "0")
                     .addParameter("valIsFork", repository.isFork())
                     .addParameter("valForks", repository.getForks())
@@ -179,6 +230,38 @@ public class Database {
     }
 
     /**
+     * Creates a connection between a commit and a change
+     *
+     * @param commitId The commit id
+     * @param ratio The ratio
+     */
+    public void insertCommitRatioOverall(String commitId, double ratio) {
+        try (Connection con = sql2o.open()) {
+            con.createQuery(sqlInsertCommitRatioOverall)
+                    .addParameter("valIdCommit", commitId)
+                    .addParameter("valRatio", ratio)
+                    .executeUpdate();
+        }
+    }
+
+    /**
+     * Creates a connection between a commit and a change
+     *
+     * @param commitId The commit id
+     * @param feature  The feature name
+     * @param ratio    The ratio
+     */
+    public void insertCommitRatioSpecific(String commitId, String feature, double ratio) {
+        try (Connection con = sql2o.open()) {
+            con.createQuery(sqlInsertCommitRatioSpecific)
+                    .addParameter("valIdCommit", commitId)
+                    .addParameter("valFeature", feature)
+                    .addParameter("valRatio", ratio)
+                    .executeUpdate();
+        }
+    }
+
+    /**
      * Checks, whether a commit is contained in the main repository
      *
      * @param hash   The commit hash
@@ -189,6 +272,7 @@ public class Database {
         List<FFRepository> repos = getReposForCommit(hash);
         for (FFRepository repo : repos) {
             if (repo.getId() == mainId) {
+                System.out.println(hash + " is in main repository");
                 return true;
             }
         }
@@ -230,6 +314,17 @@ public class Database {
     public FFRepository getRepository(int id) {
         try (Connection con = sql2o.open()) {
             return con.createQuery(sqlGetRepo).addParameter("valId", id).executeAndFetchFirst(FFRepository.class);
+        }
+    }
+
+    /**
+     * Gets a specific repository
+     *
+     * @return FFRepository The Repository, when it exists
+     */
+    public FFRepository getMainRepository() {
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetMainRepo).executeAndFetchFirst(FFRepository.class);
         }
     }
 
@@ -307,6 +402,41 @@ public class Database {
             }
             return changes;
         }
+    }
+
+    /**
+     * Gets the ratio for a specific commit
+     *
+     * @param id The commit id
+     * @return double The ratio
+     */
+    public double getRatioOverallForCommit(String id) {
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetRatioOverallForCommit).addParameter("valId", id).executeAndFetchFirst(Double.class);
+        }
+    }
+
+    /**
+     * Gets the ratio for a specific commit
+     *
+     * @param id The commit id
+     * @return FFRatioSpecific The ratio
+     */
+    public FFRatioSpecific getRatioSpecificForCommit(String id) {
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetRatioSpecificForCommit).addParameter("valId", id).executeAndFetchFirst(FFRatioSpecific.class);
+        }
+    }
+
+    /**
+     * Checks, if a commit has changes
+     *
+     * @param id The commit id
+     * @return boolean true, when the repository exists
+     */
+    public boolean existsChangesForCommit(String id) {
+        int changes = getChangesForCommit(id).size();
+        return changes > 0;
     }
 
 }

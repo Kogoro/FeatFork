@@ -28,6 +28,7 @@ hs_err_pid*
 # .idea/dictionaries
 
 # Sensitive or high-churn files:
+/repos
 # .idea/dataSources.ids
 # .idea/dataSources.xml
 # .idea/sqlDataSources.xml
