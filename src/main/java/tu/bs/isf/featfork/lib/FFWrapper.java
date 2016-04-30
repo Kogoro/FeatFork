@@ -1,4 +1,4 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.lib;
 
 import java.util.List;
 
@@ -21,10 +21,11 @@ public class FFWrapper {
         String mainURL = ffForkFetcher.getMainURL();
         if (mainURL != "") {
             ffvcs.setMainRepository(mainURL);
-            ffvcs.start(mainURL);
+            ffvcs.startMain(mainURL);
             System.out.println("Start gathering the fork repositories ... ");
             List<String> forkURLs = ffForkFetcher.getForkURLs();
-            ffvcs.start(forkURLs);
+            System.out.println(forkURLs.toString());
+            ffvcs.startForks(forkURLs);
         } else {
             System.out.println("Error: Could not initiate main repository through a error before.");
         }

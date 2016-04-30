@@ -1,8 +1,6 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.models;
 
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 
 /**
  * Created by Christopher Sontag on 31.03.2016.

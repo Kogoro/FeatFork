@@ -1,6 +1,4 @@
-package tu.bs.isf.featfork;
-
-import org.eclipse.jgit.diff.DiffEntry;
+package tu.bs.isf.featfork.models;
 
 /**
  * Created by Christopher Sontag on 31.03.2016.

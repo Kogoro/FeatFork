@@ -1,4 +1,4 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.lib;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -10,6 +10,8 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import tu.bs.isf.featfork.FeatFork;
+import tu.bs.isf.featfork.models.FFCommit;
 
 import java.io.File;
 import java.io.IOException;
@@ -22,6 +24,7 @@ import java.util.*;
 public class FFGit extends FFVCSInterface {
 
     List<RevCommit> commits = new ArrayList<>();
+    List<String> urlForks = new ArrayList<>();
 
     public FFGit(List<String> fileEndings, List<String> blackList) {
         super(fileEndings, blackList);
@@ -36,14 +39,17 @@ public class FFGit extends FFVCSInterface {
     }
 
     @Override
-    public void start(List<String> urls) {
-        for (String url : urls) {
+    public void startForks(List<String> urls) {
+        int i = 0;
+        this.urlForks = urls;
+        for (String url : urlForks) {
+            System.out.println("Processing fork " + (++i));
             run(url);
         }
     }
 
     @Override
-    public void start(String url) {
+    public void startMain(String url) {
         run(url);
     }
 
@@ -64,8 +70,15 @@ public class FFGit extends FFVCSInterface {
     protected void downloadRepository(String cloneURL, File savePath) {
         System.out.print("Start downloading " + cloneURL + " ... ");
         try {
-            Git git = Git.cloneRepository().setURI(cloneURL).setDirectory(savePath).call();
-            git.getRepository().close();
+            if (!savePath.exists()) {
+                Git git = Git.cloneRepository().setURI(cloneURL).setDirectory(savePath).call();
+                git.close();
+            } else {
+                System.out.println("Repository already downloaded. Pull the latest changes ...");
+                Repository repo = new FileRepository(savePath.getPath() + "/.git");
+                Git git = new Git(repo);
+                git.pull().call();
+            }
             System.out.println("done.");
         } catch (GitAPIException e) {
             System.out.println("\nError: " + e.getMessage());
@@ -86,31 +99,33 @@ public class FFGit extends FFVCSInterface {
             AnyObjectId headId;
 
             headId = repo.resolve(Constants.HEAD);
-            RevCommit root = revWalk.parseCommit(headId);
-            revWalk.markStart(root);
-            Iterator<RevCommit> commitIterator = revWalk.iterator();
+            if (headId != null) {
+                RevCommit root = revWalk.parseCommit(headId);
+                revWalk.markStart(root);
+                Iterator<RevCommit> commitIterator = revWalk.iterator();
 
-            int i = 0;
-            if (commitIterator.hasNext()) {
-                RevCommit first = commitIterator.next();
-                while (commitIterator.hasNext()) {
-                    RevCommit next = commitIterator.next();
-                    System.out.println("Commit: " + (++i));
-                    commitExists = null;
-                    commitExists = database.getCommit(first.getName());
-                    if (commitExists == null) {
-                        database.insertCommit(first, getFromBranch(git, first));
-                        if (!database.existsChangesForCommit(first.getName())) {
-                            commits.add(first);
+                int i = 0;
+                if (commitIterator.hasNext()) {
+                    RevCommit first = commitIterator.next();
+                    while (commitIterator.hasNext()) {
+                        RevCommit next = commitIterator.next();
+                        System.out.println("Commit: " + (++i));
+                        if (urlForks.isEmpty() || !database.existsCommit(first.getName())) {
+                            database.insertCommit(first, getFromBranch(git, first.getName()));
+                            if (!database.existsChangesForCommit(first.getName())) {
+                                commits.add(first);
+                            }
                         }
+                        if (urlForks.isEmpty() || !database.isCommitInRepo(first.getName(), file.hashCode()))
+                            database.insertRepoCommit(file.hashCode(), first.getName());
+                        first = next;
                     }
-                    //commits.add(first);
-                    database.insertRepoCommit(file.hashCode(), first.getName());
-                    first = next;
                 }
             }
+            revWalk.dispose();
+            git.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Error: " + e.getMessage());
         }
     }
 
@@ -175,9 +190,11 @@ public class FFGit extends FFVCSInterface {
                                 for (String str : strs) {
                                     List<String> features = analyzer.analyse(str);
                                     for (String feature : features) {
-                                        String uuid = UUID.randomUUID().toString().replace("-", "");
-                                        database.insertChange(uuid, filePath, feature);
-                                        database.insertCommitChange(first.getName(), uuid);
+                                        if (!feature.isEmpty() && !feature.equals("")) {
+                                            String uuid = UUID.randomUUID().toString().replace("-", "");
+                                            database.insertChange(uuid, filePath, feature);
+                                            database.insertCommitChange(first.getName(), uuid);
+                                        }
                                     }
                                 }
                             }
@@ -191,6 +208,8 @@ public class FFGit extends FFVCSInterface {
                 }
                 analyzer.resetRatio();
             }
+            revWalk.close();
+            git.close();
         } catch (IOException e) {
             e.printStackTrace();
         } catch (GitAPIException e) {
@@ -198,32 +217,17 @@ public class FFGit extends FFVCSInterface {
         }
     }
 
-    /**
-     * find out which branch that specified commit come from.
-     * http://stackoverflow.com/a/13925765
-     *
-     * @param commit
-     * @return branch name.
-     * @throws GitAPIException
-     */
-    private String getFromBranch(Git git, RevCommit commit) {
-        Collection<ReflogEntry> entries = null;
+    private String getFromBranch(Git git, String hash) {
+        List<Ref> refs = new ArrayList<>();
         try {
-            entries = git.reflog().call();
+            refs = git.branchList().setContains(hash).call();
         } catch (GitAPIException e) {
             e.printStackTrace();
         }
-        for (ReflogEntry entry : entries) {
-            if (!entry.getOldId().getName().equals(commit.getName())) {
-                continue;
-            }
-
-            CheckoutEntry checkOutEntry = entry.parseCheckout();
-            if (checkOutEntry != null) {
-                return checkOutEntry.getFromBranch();
-            }
+        if (refs.size() > 0) {
+            return refs.get(0).getName();
         }
-        return null;
+        return "";
     }
 
     /**

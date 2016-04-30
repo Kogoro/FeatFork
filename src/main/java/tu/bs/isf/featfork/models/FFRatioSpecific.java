@@ -1,4 +1,4 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.models;
 
 /**
  * Created by Christopher Sontag on 24.04.2016.

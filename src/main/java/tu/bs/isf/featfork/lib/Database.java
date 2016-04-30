@@ -1,12 +1,17 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.lib;
 
 import org.eclipse.egit.github.core.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.sql2o.Connection;
 import org.sql2o.Sql2o;
 import org.sql2o.Sql2oException;
+import tu.bs.isf.featfork.models.FFChange;
+import tu.bs.isf.featfork.models.FFCommit;
+import tu.bs.isf.featfork.models.FFRatioSpecific;
+import tu.bs.isf.featfork.models.FFRepository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -37,16 +42,19 @@ public class Database {
     /**
      * SQL SELECT STATEMENTS
      **/
-    private String sqlGetRepos = "SELECT id, name, owner, pullRequestChain, isFork, forks, watchers FROM Repository";
-    private String sqlGetRepo = "SELECT id, name, pullRequestChain, isFork, forks, watchers FROM Repository Where id = :valId";
-    private String sqlGetMainRepo = "SELECT id, name, pullRequestChain, isFork, forks, watchers FROM Repository Where isFork = FALSE";
-    private String sqlGetCommit = "SELECT id, commitHash, branch, date, author FROM Commit Where commitHash = :valId";
-    private String sqlGetChange = "SELECT id, file, expression FROM Change Where ID = :valId";
+    private String sqlGetRepos = "SELECT * FROM Repository";
+    private String sqlGetRepo = "SELECT * FROM Repository WHERE id = :valId";
+    private String sqlGetMainRepo = "SELECT * FROM Repository WHERE isFork = FALSE";
+    private String sqlGetCommit = "SELECT * FROM Commit WHERE commitHash = :valId";
+    private String sqlGetChange = "SELECT * FROM Change WHERE ID = :valId";
     private String sqlGetReposForCommit = "SELECT idRepository FROM RepoCommit Where idCommit = :valId";
     private String sqlGetChangesForCommit = "SELECT idChange FROM CommitChange Where idCommit = :valId";
     private String sqlGetCommitsLeaving = "SELECT idCommit FROM RepoCommit t1 WHERE idRepository = :valRepoId AND NOT EXISTS(SELECT idCommit FROM RepoCommit t2 where idCommit = t1.idCommit AND idRepository = :valRepoMainId);";
     private String sqlGetRatioOverallForCommit = "SELECT ratio FROM CommitRatioOverall Where idCommit = :valId";
     private String sqlGetRatioSpecificForCommit = "SELECT feature,ratio FROM CommitRatioSpecific Where idCommit = :valId";
+    private String sqlGetCommitCount = "SELECT COUNT(id) FROM Commit Where commitHash = :valId";
+    private String sqlGetChangesCount = "SELECT COUNT(idChange) FROM CommitChange Where idCommit = :valId";
+    private String sqlGetChangesAndFilesForCommit = "SELECT t2.ID, t2.FILE, t2.EXPRESSION FROM COMMITCHANGE t1 INNER JOIN CHANGE t2 ON t1.IDCHANGE=t2.ID WHERE t1.IDCOMMIT = :valId";
 
     /**
      * SQL INSERT STATEMENTS
@@ -63,7 +71,7 @@ public class Database {
      * Constructor
      */
     public Database() {
-        sql2o = new Sql2o("jdbc:h2:~/test", "SA", "");
+        sql2o = new Sql2o("jdbc:h2:~/featfork", "SA", "");
         createTables();
     }
 
@@ -147,6 +155,7 @@ public class Database {
      * Insert a Repository into the database
      *
      * @param repository The repository
+     * @param id The repository id
      */
     public void insertRepository(Repository repository, int id) {
         try (Connection con = sql2o.open()) {
@@ -155,6 +164,27 @@ public class Database {
                     .addParameter("valName", repository.getName())
                     .addParameter("valOwner", repository.getOwner().getLogin())
                     .addParameter("valChain", "0")
+                    .addParameter("valIsFork", repository.isFork())
+                    .addParameter("valForks", repository.getForks())
+                    .addParameter("valWatchers", repository.getWatchers())
+                    .executeUpdate();
+        }
+    }
+
+    /**
+     * Insert a Repository into the database
+     *
+     * @param repository The repository
+     * @param id The repository id
+     * @param chain The chain
+     */
+    public void insertRepository(Repository repository, int id, String chain) {
+        try (Connection con = sql2o.open()) {
+            con.createQuery(sqlInsertRepo)
+                    .addParameter("valId", id)
+                    .addParameter("valName", repository.getName())
+                    .addParameter("valOwner", repository.getOwner().getLogin())
+                    .addParameter("valChain", chain)
                     .addParameter("valIsFork", repository.isFork())
                     .addParameter("valForks", repository.getForks())
                     .addParameter("valWatchers", repository.getWatchers())
@@ -233,7 +263,7 @@ public class Database {
      * Creates a connection between a commit and a change
      *
      * @param commitId The commit id
-     * @param ratio The ratio
+     * @param ratio    The ratio
      */
     public void insertCommitRatioOverall(String commitId, double ratio) {
         try (Connection con = sql2o.open()) {
@@ -272,7 +302,23 @@ public class Database {
         List<FFRepository> repos = getReposForCommit(hash);
         for (FFRepository repo : repos) {
             if (repo.getId() == mainId) {
-                System.out.println(hash + " is in main repository");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks, whether a commit is contained in a repository
+     *
+     * @param hash   The commit hash
+     * @param repoId The repository id
+     * @return boolean true, when the commit is contained
+     */
+    public boolean isCommitInRepo(String hash, int repoId) {
+        List<FFRepository> repos = getReposForCommit(hash);
+        for (FFRepository repo : repos) {
+            if (repo.getId() == repoId) {
                 return true;
             }
         }
@@ -363,7 +409,8 @@ public class Database {
         try (Connection con = sql2o.open()) {
             List<Integer> ids = con.createQuery(sqlGetReposForCommit).addParameter("valId", id).executeAndFetch(Integer.class);
             for (Integer repoId : ids) {
-                repos.addAll(con.createQuery(sqlGetRepo).addParameter("valId", repoId).executeAndFetch(FFRepository.class));
+                FFRepository repo = con.createQuery(sqlGetRepo).addParameter("valId", repoId).executeAndFetchFirst(FFRepository.class);
+                repos.add(repo);
             }
             return repos;
         }
@@ -432,11 +479,43 @@ public class Database {
      * Checks, if a commit has changes
      *
      * @param id The commit id
-     * @return boolean true, when the repository exists
+     * @return boolean true, when changes exist
      */
     public boolean existsChangesForCommit(String id) {
-        int changes = getChangesForCommit(id).size();
-        return changes > 0;
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetChangesCount).addParameter("valId", id).executeAndFetchFirst(Integer.class) > 0;
+        }
     }
 
+    /**
+     * Checks, if a commit exists
+     *
+     * @param id The commit id
+     * @return boolean true, when the commit exist
+     */
+    public boolean existsCommit(String id) {
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetCommitCount).addParameter("valId", id).executeAndFetchFirst(Integer.class) > 0;
+        }
+    }
+
+    public HashMap<String, List<String>> getChangesHashForCommit(String id) {
+        HashMap<String, List<String>> map = new HashMap<>();
+        try (Connection con = sql2o.open()) {
+            List<FFChange> changes = con.createQuery(sqlGetChangesAndFilesForCommit).addParameter("valId", id).executeAndFetch(FFChange.class);
+            for (FFChange change : changes) {
+                String feature = change.getExpression();
+                if (!map.containsKey(feature)) {
+                    List<String> paths = new ArrayList<>();
+                    paths.add(change.getFile());
+                    map.put(feature, paths);
+                } else {
+                    List<String> paths = map.get(feature);
+                    paths.add(change.getFile());
+                    map.put(feature, paths);
+                }
+            }
+            return map;
+        }
+    }
 }

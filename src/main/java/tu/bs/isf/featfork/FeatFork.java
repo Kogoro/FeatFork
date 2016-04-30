@@ -1,7 +1,13 @@
 package tu.bs.isf.featfork;
 
-import javax.xml.crypto.Data;
-import java.io.*;
+import tu.bs.isf.featfork.exporter.FFExporter;
+import tu.bs.isf.featfork.exporter.FFExporterCSV;
+import tu.bs.isf.featfork.exporter.FFExporterHTML;
+import tu.bs.isf.featfork.lib.Database;
+import tu.bs.isf.featfork.lib.FFGit;
+import tu.bs.isf.featfork.lib.FFGithubForkFetcher;
+import tu.bs.isf.featfork.lib.FFWrapper;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
@@ -11,7 +17,6 @@ import java.util.Scanner;
  */
 public class FeatFork {
     public static final String PATH = "repos/";
-    public static final File file = new File("res.csv");
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -67,16 +72,29 @@ public class FeatFork {
             System.out.println("Should the database overwritten? (true/false):");
             boolean overwrite = scanner.nextBoolean();
             if (overwrite) {
+                database.drop();
+                database.createTables();
                 System.out.println("How many forks of the first level should be analyzed?:");
                 int maxrepo = scanner.nextInt();
                 System.out.println("How many levels should be analyzed?:");
                 int maxlevel = scanner.nextInt();
-                database.drop();
-                database.createTables();
                 start(username, reponame, maxrepo, maxlevel, fileEnding, blackList);
             }
         }
-        //writeToCSV(database);
+        System.out.println("Which file format should be used for the export? (1 -> CSV,2 -> HTML):");
+        int exportType = scanner.nextInt();
+        FFExporter ffExporter;
+        switch (exportType) {
+            case 1:
+                ffExporter = new FFExporterCSV();
+                break;
+            case 2:
+                ffExporter = new FFExporterHTML();
+                break;
+            default:
+                ffExporter = new FFExporterCSV();
+        }
+        ffExporter.write(database);
     }
 
     public static void start(String username, String reponame, int maxrepo, int maxlevel, List<String> fileEnding, List<String> blackList) {
@@ -86,30 +104,5 @@ public class FeatFork {
         wrapper.start();
         System.out.println("Searched Forks: " + ffGithubForkFetcher.searchedForks + " - Clean Forks: " + ffGithubForkFetcher.cleanForks);
 
-    }
-
-    private static void writeToCSV(Database database) {
-        System.out.print("Updating " + file.getName() + "... ");
-        try {
-            BufferedWriter out = new BufferedWriter(new FileWriter(file));
-            for (FFRepository repos : database.getRepositories()) {
-                out.append(repos.getOwner() + "/" + repos.getName() + ";\n");
-                for (FFCommit commit : database.getCommitsForRepoLeaving(repos.getId(), (int) database.getMainRepository().getId())) {
-                    List<FFChange> changes = database.getChangesForCommit(commit.getId());
-                    if (!changes.isEmpty()) {
-                        out.append(";" + commit.getCommitHash() + ";\n");
-                        for (FFChange change : changes) {
-                            out.append(";;" + change.getFile() + ";" + change.getExpression() + ";\n");
-                        }
-                    }
-                }
-            }
-            out.close();
-        } catch (FileNotFoundException e) {
-            System.out.println("Not found " + file.getAbsolutePath());
-        } catch (IOException e) {
-            System.out.println("IOException for " + file.getAbsolutePath());
-        }
-        System.out.println("done.");
     }
 }

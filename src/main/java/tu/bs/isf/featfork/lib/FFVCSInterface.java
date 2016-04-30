@@ -1,4 +1,4 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.lib;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,9 +19,9 @@ public abstract class FFVCSInterface {
         this.blackList = blackList;
     }
 
-    public abstract void start(List<String> urls);
+    public abstract void startForks(List<String> urls);
 
-    public abstract void start(String url);
+    public abstract void startMain(String url);
 
     protected abstract void run(String url);
 
@@ -31,11 +31,11 @@ public abstract class FFVCSInterface {
 
     protected abstract void getChangesForCommit(File file);
 
-    public void setMainRepository(String mainRepository) {
-        this.mainRepository = mainRepository;
-    }
-
     public String getMainRepository() {
         return mainRepository;
+    }
+
+    public void setMainRepository(String mainRepository) {
+        this.mainRepository = mainRepository;
     }
 }

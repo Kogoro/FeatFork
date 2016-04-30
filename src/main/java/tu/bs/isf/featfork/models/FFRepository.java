@@ -1,10 +1,6 @@
-package tu.bs.isf.featfork;
+package tu.bs.isf.featfork.models;
 
 import org.eclipse.egit.github.core.Repository;
-
-import java.util.Comparator;
-import java.util.Date;
-import java.util.List;
 
 /**
  * Created by Christopher Sontag on 31.03.2016.
