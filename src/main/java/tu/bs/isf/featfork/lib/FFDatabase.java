@@ -16,12 +16,12 @@ import java.util.List;
 
 /**
  * Created by Christopher Sontag.
- * <p>
+ *
  * A class that interacts with the database with the git and github api.
  *
  * @version 1.0
  */
-public class Database {
+public class FFDatabase {
 
     /**
      * DATABASE INSTANCE
@@ -51,7 +51,8 @@ public class Database {
     private String sqlGetChangesForCommit = "SELECT idChange FROM CommitChange Where idCommit = :valId";
     private String sqlGetCommitsLeaving = "SELECT idCommit FROM RepoCommit t1 WHERE idRepository = :valRepoId AND NOT EXISTS(SELECT idCommit FROM RepoCommit t2 where idCommit = t1.idCommit AND idRepository = :valRepoMainId);";
     private String sqlGetRatioOverallForCommit = "SELECT ratio FROM CommitRatioOverall Where idCommit = :valId";
-    private String sqlGetRatioSpecificForCommit = "SELECT feature,ratio FROM CommitRatioSpecific Where idCommit = :valId";
+    private String sqlGetRatioSpecificForCommit = "SELECT ratio FROM CommitRatioSpecific Where idCommit = :valId AND feature = :valFeature";
+    private String sqlGetImportantChangesSpecificForCommit = "SELECT feature,ratio FROM CommitRatioSpecific Where idCommit = :valId AND ratio > :valRatio";
     private String sqlGetCommitCount = "SELECT COUNT(id) FROM Commit Where commitHash = :valId";
     private String sqlGetChangesCount = "SELECT COUNT(idChange) FROM CommitChange Where idCommit = :valId";
     private String sqlGetChangesAndFilesForCommit = "SELECT t2.ID, t2.FILE, t2.EXPRESSION FROM COMMITCHANGE t1 INNER JOIN CHANGE t2 ON t1.IDCHANGE=t2.ID WHERE t1.IDCOMMIT = :valId";
@@ -70,8 +71,8 @@ public class Database {
     /**
      * Constructor
      */
-    public Database() {
-        sql2o = new Sql2o("jdbc:h2:~/featfork", "SA", "");
+    public FFDatabase() {
+        sql2o = new Sql2o("jdbc:h2:~/featfork100", "SA", "");
         createTables();
     }
 
@@ -155,7 +156,7 @@ public class Database {
      * Insert a Repository into the database
      *
      * @param repository The repository
-     * @param id The repository id
+     * @param id         The repository id
      */
     public void insertRepository(Repository repository, int id) {
         try (Connection con = sql2o.open()) {
@@ -175,8 +176,8 @@ public class Database {
      * Insert a Repository into the database
      *
      * @param repository The repository
-     * @param id The repository id
-     * @param chain The chain
+     * @param id         The repository id
+     * @param chain      The chain
      */
     public void insertRepository(Repository repository, int id, String chain) {
         try (Connection con = sql2o.open()) {
@@ -417,11 +418,11 @@ public class Database {
     }
 
     /**
-     * Gets all commits, which are shared between two repository
+     * Gets all commits, which are not shared between two repository
      *
      * @param repoId The repository id
      * @param mainId The main repository id
-     * @return List<FFCommit> The list of commits, which are shared between the repositories
+     * @return List<FFCommit> The list of commits, which are not shared between the repositories
      */
     public List<FFCommit> getCommitsForRepoLeaving(int repoId, int mainId) {
         List<FFCommit> commits = new ArrayList<>();
@@ -467,11 +468,23 @@ public class Database {
      * Gets the ratio for a specific commit
      *
      * @param id The commit id
-     * @return FFRatioSpecific The ratio
+     * @return double The ratio
      */
-    public FFRatioSpecific getRatioSpecificForCommit(String id) {
+    public double getRatioSpecificForCommit(String id, String feature) {
         try (Connection con = sql2o.open()) {
-            return con.createQuery(sqlGetRatioSpecificForCommit).addParameter("valId", id).executeAndFetchFirst(FFRatioSpecific.class);
+            return con.createQuery(sqlGetRatioSpecificForCommit).addParameter("valId", id).addParameter("valFeature", feature).executeAndFetchFirst(Double.class);
+        }
+    }
+
+    /**
+     * Checks, whether there is a important change
+     *
+     * @param id The commit id
+     * @return boolean The ratio
+     */
+    public boolean existsImportantChangeSpecificForCommit(String id, double ratio) {
+        try (Connection con = sql2o.open()) {
+            return con.createQuery(sqlGetImportantChangesSpecificForCommit).addParameter("valId", id).addParameter("valRatio", ratio).executeAndFetch(FFRatioSpecific.class).size() > 0;
         }
     }
 
@@ -499,6 +512,12 @@ public class Database {
         }
     }
 
+    /**
+     * Returns all changes with all paths
+     *
+     * @param id The commit id
+     * @return HashMap The map with changes as key and the paths as list
+     */
     public HashMap<String, List<String>> getChangesHashForCommit(String id) {
         HashMap<String, List<String>> map = new HashMap<>();
         try (Connection con = sql2o.open()) {

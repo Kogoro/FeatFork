@@ -14,16 +14,24 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Created by Christopher Sontag on 22.04.2016.
+ * Created by Christopher Sontag
  */
 public class FFGithubForkFetcher extends FFForkFetcherInterface {
 
     private static GitHubClient gitHubClient = new GitHubClient().setOAuth2Token("3e24be4b14c1168b5f65b71e1dc1d989d553e6ae");
     private static RepositoryService repoService = new RepositoryService(gitHubClient);
     private static Repository main;
-    File filePathMain;
+    private File filePathMain;
     private CommitService commitService = new CommitService(gitHubClient);
 
+    /**
+     * Constructor
+     *
+     * @param username       The username of the main repository
+     * @param repositoryName The repositoryname of the main repository
+     * @param maxCount       The number of maximal forks gathered
+     * @param maxLevel       The number of maximal levels searched
+     */
     public FFGithubForkFetcher(String username, String repositoryName, int maxCount, int maxLevel) {
         super(username, repositoryName, maxCount + 1, maxLevel);
         try {
@@ -36,6 +44,11 @@ public class FFGithubForkFetcher extends FFForkFetcherInterface {
         }
     }
 
+    /**
+     * Returns the list of forks URLs
+     *
+     * @return List<String> The fork URLs
+     */
     @Override
     public List<String> getForkURLs() {
         List<String> urls = new ArrayList<>();
@@ -43,6 +56,14 @@ public class FFGithubForkFetcher extends FFForkFetcherInterface {
         return urls;
     }
 
+    /**
+     * Returns the fork URLs with a given level of depth
+     *
+     * @param repository The repository
+     * @param level      The actual level of the gathering
+     * @param chain      The actual pullRequestChain
+     * @return List<String> The URLs of the forks
+     */
     private List<String> getForksForLevel(Repository repository, int level, String chain) {
         List<String> urls = new ArrayList<>();
         if (level < maxLevel + 1) {
@@ -93,6 +114,11 @@ public class FFGithubForkFetcher extends FFForkFetcherInterface {
         return urls;
     }
 
+    /**
+     * Returns the main URL
+     *
+     * @return String The main URL
+     */
     @Override
     public String getMainURL() {
         if (main == null) return "";

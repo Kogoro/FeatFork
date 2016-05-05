@@ -11,33 +11,49 @@ import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import tu.bs.isf.featfork.FeatFork;
-import tu.bs.isf.featfork.models.FFCommit;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
 
 /**
- * Created by Christopher Sontag on 22.04.2016.
+ * Created by Christopher Sontag
  */
 public class FFGit extends FFVCSInterface {
 
-    List<RevCommit> commits = new ArrayList<>();
-    List<String> urlForks = new ArrayList<>();
+    private List<RevCommit> commits = new ArrayList<>();
+    private List<String> urlForks = new ArrayList<>();
 
+    /**
+     * Constructor
+     *
+     * @param fileEndings The allowed file endings
+     * @param blackList   The file blacklist
+     */
     public FFGit(List<String> fileEndings, List<String> blackList) {
         super(fileEndings, blackList);
-        this.database = new Database();
-        this.analyzer = new Analyzer();
+        this.database = new FFDatabase();
+        this.analyzer = new FFAnalyser();
     }
 
+    /**
+     * Constructor
+     */
     public FFGit() {
         super(new ArrayList<String>(), new ArrayList<String>());
-        this.database = new Database();
-        this.analyzer = new Analyzer();
+        this.database = new FFDatabase();
+        this.analyzer = new FFAnalyser();
     }
 
+    /**
+     * Starts the forking process for multiple urls
+     *
+     * @param urls The cloneURLs of the forks
+     */
     @Override
     public void startForks(List<String> urls) {
         int i = 0;
@@ -48,11 +64,21 @@ public class FFGit extends FFVCSInterface {
         }
     }
 
+    /**
+     * Start the gathering of the main repository
+     *
+     * @param url The URL of the main repository
+     */
     @Override
     public void startMain(String url) {
         run(url);
     }
 
+    /**
+     * The generalized gathering method
+     *
+     * @param url The URL, which should be gathered
+     */
     @Override
     protected void run(String url) {
         String filePath = url.replaceFirst("https://.*.com/", "").replace(".git", "").replace("/", "_");
@@ -66,6 +92,11 @@ public class FFGit extends FFVCSInterface {
         commits.clear();
     }
 
+    /**
+     * Downloads the repository under the given URL to the given path
+     * @param cloneURL The cloneURL
+     * @param savePath The path, where the repository should be saved
+     */
     @Override
     protected void downloadRepository(String cloneURL, File savePath) {
         System.out.print("Start downloading " + cloneURL + " ... ");
@@ -80,17 +111,18 @@ public class FFGit extends FFVCSInterface {
                 git.pull().call();
             }
             System.out.println("done.");
-        } catch (GitAPIException e) {
-            System.out.println("\nError: " + e.getMessage());
         } catch (Exception ex) {
             System.out.println("\nError: " + ex.getMessage());
         }
     }
 
+    /**
+     * Extraction of the commits for a given repository
+     * @param file The folder for the repository, which should be analyzed
+     */
     @Override
     protected void getCommitsForRepository(File file) {
-        Repository repo = null;
-        FFCommit commitExists = null;
+        Repository repo;
         try {
             repo = new FileRepository(file.getPath() + "/.git");
 
@@ -102,23 +134,23 @@ public class FFGit extends FFVCSInterface {
             if (headId != null) {
                 RevCommit root = revWalk.parseCommit(headId);
                 revWalk.markStart(root);
-                Iterator<RevCommit> commitIterator = revWalk.iterator();
 
                 int i = 0;
-                if (commitIterator.hasNext()) {
-                    RevCommit first = commitIterator.next();
-                    while (commitIterator.hasNext()) {
-                        RevCommit next = commitIterator.next();
-                        System.out.println("Commit: " + (++i));
-                        if (urlForks.isEmpty() || !database.existsCommit(first.getName())) {
-                            database.insertCommit(first, getFromBranch(git, first.getName()));
-                            if (!database.existsChangesForCommit(first.getName())) {
-                                commits.add(first);
-                            }
+                for (RevCommit first : revWalk) {
+                    i++;
+                    String hash = first.getName();
+                    if (!database.existsCommit(hash)) {
+                        database.insertCommit(first, getBranch(git, hash));
+                        if (!database.existsChangesForCommit(hash)) {
+                            System.out.println("Commit: " + i + " added.");
+                            commits.add(first);
+                        } else {
+                            System.out.println("Commit: " + i + " already in database.");
                         }
-                        if (urlForks.isEmpty() || !database.isCommitInRepo(first.getName(), file.hashCode()))
-                            database.insertRepoCommit(file.hashCode(), first.getName());
-                        first = next;
+                        if (!database.isCommitInRepo(hash, file.hashCode())) {
+                            System.out.println("RepoCommit: " + i + " added.");
+                            database.insertRepoCommit(file.hashCode(), hash);
+                        }
                     }
                 }
             }
@@ -129,10 +161,14 @@ public class FFGit extends FFVCSInterface {
         }
     }
 
+    /**
+     * Extract the changes from each commit
+     * @param file The folder for the repository, which should be analyzed
+     */
     @Override
     protected void getChangesForCommit(File file) {
-        Repository repo = null;
-        List<DiffEntry> diff = null;
+        Repository repo;
+        List<DiffEntry> diff;
         try {
             repo = new FileRepository(file.getPath() + "/.git");
 
@@ -175,7 +211,7 @@ public class FFGit extends FFVCSInterface {
                     for (String blackWord : blackList) {
                         if (filePath.contains(blackWord)) onBlackList = true;
                     }
-                    if (filePath.indexOf(".") != -1) {
+                    if (filePath.contains(".")) {
                         String fileExtension = filePath.substring(filePath.lastIndexOf("."));
                         if (fileExtension.contains(fileExtension) && !onBlackList) {
                             ((StringOutputStream) outputStream).reset();
@@ -210,14 +246,19 @@ public class FFGit extends FFVCSInterface {
             }
             revWalk.close();
             git.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (GitAPIException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
         }
     }
 
-    private String getFromBranch(Git git, String hash) {
+    /**
+     * Returns a branch for a specific commit
+     *
+     * @param git  The git instance
+     * @param hash The commit hash
+     * @return String The branchname
+     */
+    private String getBranch(Git git, String hash) {
         List<Ref> refs = new ArrayList<>();
         try {
             refs = git.branchList().setContains(hash).call();
@@ -225,7 +266,7 @@ public class FFGit extends FFVCSInterface {
             e.printStackTrace();
         }
         if (refs.size() > 0) {
-            return refs.get(0).getName();
+            return refs.get(0).getName().replace("refs/heads/", "");
         }
         return "";
     }
@@ -235,7 +276,7 @@ public class FFGit extends FFVCSInterface {
      */
     private class StringOutputStream extends OutputStream {
 
-        String mBuf = "";
+        private String mBuf = "";
 
         public String getString() {
             return mBuf;

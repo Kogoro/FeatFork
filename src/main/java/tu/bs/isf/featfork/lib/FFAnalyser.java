@@ -6,17 +6,23 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * Created by Christopher Sontag on 22.04.2016.
+ * Created by Christopher Sontag
  */
-public class Analyzer {
+public class FFAnalyser {
 
-    int directivesSuccess, directivesAll;
+    private int directivesSuccess, directivesAll;
     private HashMap<String, Integer> featureRatios = new HashMap<>();
 
+    /**
+     * Analyses a given string for preprocessor-directives
+     *
+     * @param str The string, which should be analyzed
+     * @return List<String> A list of features
+     */
     public List<String> analyse(String str) {
         List<String> strings = new ArrayList<>();
 
-        if (str.contains("+") && str.contains("#")) {
+        if (str.contains("+") && str.contains("#") && !str.contains("//")) {
 
             //Remove the plus sign, the comments and unimportant whitespaces
             str = str.replace("+", "").replace("defined", "").replace("ENABLED", "").replace("DISABLED", "").replaceFirst("\\s?\\/\\/.*", "");
@@ -28,7 +34,7 @@ public class Analyzer {
             str = str.replace("!", "");
 
             //Remove whitespaces
-            while (str.indexOf(" ") != str.lastIndexOf(" ") && str.indexOf(" ") != -1) {
+            while (str.indexOf(" ") != str.lastIndexOf(" ") && str.contains(" ")) {
                 str = str.replaceFirst(" ", "");
             }
 
@@ -69,6 +75,12 @@ public class Analyzer {
         return strings;
     }
 
+    /**
+     * Splits a expression in different features
+     *
+     * @param str The Expression
+     * @return List<String> The list of features
+     */
     private List<String> getFeatures(String str) {
         List<String> strings = new ArrayList<>();
         strings.addAll(Arrays.asList(str.split("(&&|\\|\\|)")));
@@ -84,6 +96,11 @@ public class Analyzer {
         return strings;
     }
 
+    /**
+     * Returns the overall ratio for a commit
+     *
+     * @return double The ratio overall
+     */
     public double getRatioOverall() {
         System.out.println("Important directives: " + directivesSuccess + " All directives: " + directivesAll);
         if (directivesAll > 0)
@@ -91,6 +108,11 @@ public class Analyzer {
         return 0;
     }
 
+    /**
+     * Returns the specific ratio for a specific feature in a commit
+     *
+     * @return HashMap The map with the features and their ratio
+     */
     public HashMap<String, Double> getRatiosSpecific() {
         HashMap<String, Double> temp = new HashMap<>();
         if (directivesAll > 0) {
@@ -102,6 +124,9 @@ public class Analyzer {
         return temp;
     }
 
+    /**
+     * Resets all ratios
+     */
     public void resetRatio() {
         directivesSuccess = 0;
         directivesAll = 0;
