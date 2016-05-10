@@ -62,6 +62,7 @@ public class FFAnalyser {
                 //strings.addAll(getFeatures(str.replace("#undef", "").trim()));
             } else if (str.contains("#else")) {
                 //strings.addAll(getFeatures(str.replace("#else", "").trim()));
+                directivesSuccess++;
             } else if (str.contains("#include")) {
                 //strings.addAll(getFeatures(str.replace("#include", "").trim()));
             } else if (str.contains("#error")) {
