@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class FFGithubForkFetcher extends FFForkFetcherInterface {
 
-    private static GitHubClient gitHubClient = new GitHubClient().setOAuth2Token("3e24be4b14c1168b5f65b71e1dc1d989d553e6ae");
+    private static GitHubClient gitHubClient = new GitHubClient().setOAuth2Token("OAUTHTOKEN");
     private static RepositoryService repoService = new RepositoryService(gitHubClient);
     private static Repository main;
     private File filePathMain;
